@@ -1,4 +1,6 @@
 package Engine;
+import java.util.*;
+
 public class MoveHandler {
 
     /**
@@ -53,6 +55,174 @@ public class MoveHandler {
         return true;
     }
 
+    public static long generateKingMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
+        long moves = generateKingAttacks(chessboard, isWhitePiece, startingPosition);
+
+        // add function in chessboard to generate if king/queen castling is possible
+        // castling is possible, add castling moves
+
+        return moves;
+    }
+
+    public static long generateKingAttacks(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
+        return PCMBB.getKingMoves(startingPosition);
+    }
+
+    public static long generateKnightMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
+        return PCMBB.KNIGHT_MOVE_MAP.get(startingPosition);
+    }
+
+    public static long generatePawnMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
+        // if the there is a same-coloured piece one square ahead, then the pawn cannot move forward at all
+        long sameColourBoard = chessboard.getSameColouredBoard(isWhitePiece);
+        long oneSquareForward = (isWhitePiece) ? startingPosition << 8 : startingPosition >>> 8;
+        long potentialMoves = ((sameColourBoard & oneSquareForward) == 0L) ? PCMBB.getPawnMoves(startingPosition, isWhitePiece) : 0L;
+
+        // check if there are pieces to capture in diagonally-opposite positions
+        long potentialAttacks = generatePawnAttacks(chessboard, isWhitePiece, startingPosition);
+        potentialMoves |= potentialAttacks;
+
+        // check for en passant
+
+        return potentialMoves;
+    }
+
+    public static long generatePawnAttacks(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
+        long potentialAttacks = PCMBB.getPawnAttacks(startingPosition, isWhitePiece);
+        long diffColourBoard = chessboard.getDiffColouredBoard(isWhitePiece);
+        return potentialAttacks & diffColourBoard;
+    }
+
+    public static long generateSlidingMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition, char pieceCode) {
+        long fullBoard = chessboard.getFullBitboard();
+        switch (pieceCode) {
+            case 'b':
+                return PCMBB.getBishopAttacks(PCMBB.BIN_TO_INDEX_MAP.get(startingPosition), fullBoard);
+            case 'r':
+                return PCMBB.getRookAttacks(PCMBB.BIN_TO_INDEX_MAP.get(startingPosition), fullBoard);
+            default:
+                return PCMBB.getQueenAttacks(PCMBB.BIN_TO_INDEX_MAP.get(startingPosition), fullBoard);
+        }
+    }
+
+    public static long generatePieceAttackingSquares(Chessboard chessboard, boolean isWhitePiece, long startingPosition, char pieceCode) {
+        long potentialAttacks;
+        switch (Character.toLowerCase(pieceCode)) {
+            case 'k':
+                potentialAttacks = generateKingAttacks(chessboard, isWhitePiece, startingPosition);
+                break;
+            case 'n':
+                potentialAttacks = generateKnightMoves(chessboard, isWhitePiece, startingPosition);
+                break;
+            case 'p':
+                potentialAttacks = generatePawnAttacks(chessboard, isWhitePiece, startingPosition);
+                break;
+            default:
+                potentialAttacks = generateSlidingMoves(chessboard, isWhitePiece, startingPosition, pieceCode);
+                break;
+        }
+        return potentialAttacks;
+    }
+
+    public static long[] generateAllAttackingSquares(Chessboard chessboard, boolean isOpposition) {
+        // check which color to generate attacking squares of
+        // e.g. if it is white's turn and we are to generate the opposition attacking squares, then we generate for black pieces
+        boolean isWhitePiece = (chessboard.getIsWhiteTurn() ^ isOpposition);
+        char[] pieceCodes = (isWhitePiece) ? PCMBB.whitePieceCodes : PCMBB.blackPieceCodes;
+        long allAttacks = 0L, criticalAttacks = 0L, criticalAttackers = 0L;
+
+        // obtain king information to check for checks
+        long kingPosition = (isWhitePiece) ? chessboard.getPiecesPosition('k') : chessboard.getPiecesPosition('K');
+        int kingRank = PCMBB.RANK_COORDINATES_MAP.get(kingPosition) - 1, kingFile = PCMBB.FILE_COORDINATES_MAP.get(kingPosition) - 'A';
+        long rankMask = PCMBB.getRankMask(kingRank), fileMask = PCMBB.getFileMask(kingFile);
+        long topLeftDiagonal = PCMBB.getTopLeftDiagonal(kingRank, kingFile), topRightDiagonal = PCMBB.getTopRightDiagonal(kingRank, kingFile);
+        long[] masks = new long[] { rankMask, fileMask, topLeftDiagonal, topRightDiagonal };
+
+        // for checking if double check
+        int count = 0;
+
+        for (char pieceCode : pieceCodes) {
+            long pieces = chessboard.getPiecesPosition(pieceCode);
+            List<Long> piecesPositions = PCMBB.getIndividualPositions(pieces);
+            for (long piece : piecesPositions) {
+                long attack = generatePieceAttackingSquares(chessboard, isWhitePiece, piece, pieceCode);
+                allAttacks |= attack;
+
+                // if piece is a king, skip, kings cannot give checks
+                if (Character.toLowerCase(pieceCode) == 'k') continue;
+                
+                // if the attack does not hit the king, it is not a check
+                if ((attack & kingPosition) == 0L) continue;
+
+                // if a piece's attack hits the king, it is considered a critical attacker
+                criticalAttackers |= piece;
+                count++;
+                // knight and pawn attacks that are checks only hit one square, which is the king square
+                if (Character.toLowerCase(pieceCode) == 'p' || Character.toLowerCase(pieceCode) == 'n') continue;
+
+                // mask is essentially a long that represents the row / file / diagonal
+                for (long mask : masks) {
+                    // for sliding pieces, we check if the piece sees the king on the mask
+                    if ((mask & piece) == 0L) continue;
+                    criticalAttacks |= (mask & attack);
+                    break;
+                }
+            }
+        }
+        // if there is a critical attack, it may be a knight / pawn so capture king square to be safe as attack square
+        if (criticalAttackers != 0L) criticalAttacks |= kingPosition;
+
+        // attacking squares cannot hit the same color pieces
+        long sameColourBoard = chessboard.getSameColouredBoard(isWhitePiece);
+        allAttacks &= ~sameColourBoard;
+
+        return new long[] { allAttacks, criticalAttacks, criticalAttackers, (long) count };
+    }
+
+    public static long generateLegalMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition, char pieceCode) {
+        // check for double check
+        // if king under double check, the king has to move
+        if (chessboard.isKingInDoubleCheck() && Character.toLowerCase(pieceCode) != 'k') return 0L;
+
+        long potentialMoves;
+        switch (Character.toLowerCase(pieceCode)) {
+            case 'k':
+                potentialMoves = generateKingMoves(chessboard, isWhitePiece, startingPosition);
+                break;
+            case 'n':
+                potentialMoves = generateKnightMoves(chessboard, isWhitePiece, startingPosition);
+                break;
+            case 'p':
+                potentialMoves = generatePawnMoves(chessboard, isWhitePiece, startingPosition);
+                break;
+            default:
+                potentialMoves = generateSlidingMoves(chessboard, isWhitePiece, startingPosition, pieceCode);
+                break;
+        }
+        
+        // potential moves generated cannot clash with same-coloured pieces
+        long sameColourBoard = chessboard.getSameColouredBoard(isWhitePiece);
+        potentialMoves &= ~sameColourBoard;
+
+        // check if king is underattack, moves can only be in the line of attack or a capture of the attacking piece
+
+        // check for pinned piece
+        // remove the piece and perform a null move check if the king is still in check
+        chessboard.performMove(pieceCode, startingPosition);
+        chessboard.performNullMove();
+        boolean pinnedPiece = chessboard.isKingInCheck();
+
+        // if not pinned piece, then it can move anywhere else, so -1 which has a binary string of 111...111
+        long blockingPositions = (pinnedPiece) ? chessboard.getCriticalAttackMap() : -1;
+
+        // undo two moves as we need to also undo the nullMove
+        chessboard.undoMove();
+        chessboard.undoMove();
+        potentialMoves &= blockingPositions;
+
+        return potentialMoves;
+    }
+
     /**
      * 
      * @param userString    String of user's intended move
@@ -78,127 +248,36 @@ public class MoveHandler {
      * 
      */
     private static boolean verifyMove(Chessboard chessboard, char pieceCode, long startingPosition, long endingPosition) {
-        // include initial check for checkmate
-        // include initial check for king in check
-        boolean kingInCheck = false;
-
+        // check if piece ending position clashes with a same-coloured piece.
         boolean isWhitePiece = Character.isUpperCase(pieceCode);
-        switch (Character.toLowerCase(pieceCode)) {
-            case 'k':
-                return verifyKingMove(chessboard, startingPosition, endingPosition, isWhitePiece, kingInCheck);
-            case 'q':
-                return verifySlidingPieceMove(chessboard, startingPosition, endingPosition, isWhitePiece, kingInCheck, pieceCode);
-            case 'r':
-                return verifySlidingPieceMove(chessboard, startingPosition, endingPosition, isWhitePiece, kingInCheck, pieceCode);
-            case 'b':
-                return verifySlidingPieceMove(chessboard, startingPosition, endingPosition, isWhitePiece, kingInCheck, pieceCode);
-            case 'n':
-                return verifyKnightMove(chessboard, startingPosition, endingPosition, isWhitePiece, kingInCheck);
-            case 'p':
-                return verifyPawnMove(chessboard, startingPosition, endingPosition, isWhitePiece, kingInCheck);
-            default:
-                System.out.println("Piece code not recognised");
+        long sameColourBoard = chessboard.getSameColouredBoard(isWhitePiece);
+        if ((sameColourBoard & endingPosition) != 0L) {
+            System.out.println("Move invalid. Ending position clashes with a same-coloured piece.");
+            return false;
+        }
+        
+        // check for king in check
+        boolean kingInCheck = chessboard.isKingInCheck();
+
+        if (kingInCheck) {
+            // check that if the move is performed, it will block the check
+            // i.e. if i generate all the attacking squares again after the move is made, the king is not under attack
+            long pseudoMove = startingPosition | endingPosition;
+            chessboard.performMove(pieceCode, pseudoMove);
+            chessboard.performNullMove();
+            boolean kingStillInCheck = chessboard.isKingInCheck();
+            chessboard.undoMove();
+            chessboard.undoMove();
+            // fails if double check or piece attacking king is a knight or pawn and it is not captured
+            if (kingStillInCheck) {
+                System.out.println("Move invalid. King is in check and intended move does not resolve the check");
                 return false;
+            }
         }
-    }
 
-    private static boolean verifyKingMove(Chessboard chessboard, long startingPosition, long endingPosition, boolean isWhitePiece, boolean kingInCheck) {
-        // consider castling, in check, checkmate
-        return true;
-    }
-
-    /**
-     * Checks if the given move is a valid move for the knight. First, it checks if the move will clash with other same-coloured pieces.
-     * Next, it will check if the move is part of the valid moves for the given position
-     * 
-     * @param chessboard        Chessboard object of chessboard in play
-     * @param startingPosition  long of piece's starting position
-     * @param endingPosition    long of piece's target position
-     * @param isWhitePiece      boolean for if piece is white
-     * @param kingInCheck       boolean for if king is in check
-     * @return                  boolean if knight move is valid
-     * 
-     */
-    private static boolean verifyKnightMove(Chessboard chessboard, long startingPosition, long endingPosition, boolean isWhitePiece, boolean kingInCheck) {
-        long sameColourBoard = (isWhitePiece) ? chessboard.getWhiteBitboard() : chessboard.getBlackBitboard();
-        if ((sameColourBoard & endingPosition) != 0L) {
-            System.out.println("Knight move invalid. Ending position clashes with a same-coloured piece.");
-            return false;
-        }
-        long potentialMoves = PCMBB.KNIGHT_MOVE_MAP.get(startingPosition);
-        if ((potentialMoves & endingPosition) == 0L) {
-            System.out.println("Knight move invalid. Ending position is not part of the valid knight moves at starting position");
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Checks if the given move is a valid move for the piece. First, it checks if the move will clash with other same-coloured pieces.
-     * Next, it will generate all potential moves (inclusive of captures) and treats all pieces as opposition pieces. Finally,
-     * the legal moveset is derived by taking all potential moves and performing a bitwiseAND with the bitwiseNOT of the same-coloured board.
-     * 
-     * @param chessboard        Chessboard object of chessboard in play
-     * @param startingPosition  long of piece's starting position
-     * @param endingPosition    long of piece's target position
-     * @param isWhitePiece      boolean for if piece is white
-     * @param kingInCheck       boolean for if king is in check
-     * @param pieceCode         char representing which sliding piece it is; q - queen, r - rook, b - bishop
-     * @return                  boolean if knight move is valid
-     * 
-     */
-    private static boolean verifySlidingPieceMove(Chessboard chessboard, long startingPosition, long endingPosition, boolean isWhitePiece, boolean kingInCheck, char pieceCode) {
-        long sameColourBoard = (isWhitePiece) ? chessboard.getWhiteBitboard() : chessboard.getBlackBitboard();
-        if ((sameColourBoard & endingPosition) != 0L) {
-            System.out.println("Sliding move invalid. Ending position clashes with a same-coloured piece.");
-            return false;
-        }
-        long fullBoard = chessboard.getFullBitboard();
-        long allMoves;
-        switch (pieceCode) {
-            case 'b':
-                allMoves = PCMBB.getBishopAttacks(PCMBB.BIN_TO_INDEX_MAP.get(startingPosition), fullBoard);
-                break;
-            case 'r':
-                allMoves = PCMBB.getRookAttacks(PCMBB.BIN_TO_INDEX_MAP.get(startingPosition), fullBoard);
-                break;
-            default:
-                allMoves = PCMBB.getQueenAttacks(PCMBB.BIN_TO_INDEX_MAP.get(startingPosition), fullBoard);
-                break;
-        } 
-        allMoves &= ~sameColourBoard;
-        if ((allMoves & endingPosition) == 0L) {
-            System.out.println("Sliding move invalid. Ending position is not part of valid bishop moves from starting position.");
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Checks if the given move is a valid move for the pawn. First, it checks if the move will clash with other same-coloured pieces.
-     * Next, it will check if the move is part of the valid moves for the given position, inclusive of pawn attacks.
-     * 
-     * @param chessboard        Chessboard object of chessboard in play
-     * @param startingPosition  long of piece's starting position
-     * @param endingPosition    long of piece's target position
-     * @param isWhitePiece      boolean for if piece is white
-     * @param kingInCheck       boolean for if king is in check
-     * @return                  boolean if knight move is valid
-     * 
-     */
-    private static boolean verifyPawnMove(Chessboard chessboard, long startingPosition, long endingPosition, boolean isWhitePiece, boolean kingInCheck) {
-        long sameColourBoard = (isWhitePiece) ? chessboard.getWhiteBitboard() : chessboard.getBlackBitboard();
-        if ((sameColourBoard & endingPosition) != 0L) {
-            System.out.println("Pawn move invlid. Ending position clashes with a same-coloured piece.");
-            return false;
-        }
-        long potentialMoves = (isWhitePiece) ? PCMBB.WHITE_PAWN_MOVE_MAP.get(startingPosition) : PCMBB.BLACK_PAWN_MOVE_MAP.get(startingPosition);
-        long potentialAttacks = (isWhitePiece) ? PCMBB.WHITE_PAWN_ATTACK_MAP.get(startingPosition) : PCMBB.BLACK_PAWN_ATTACK_MAP.get(startingPosition);
-        long diffColourBoard = (!isWhitePiece) ? chessboard.getWhiteBitboard() : chessboard.getBlackBitboard();
-        potentialAttacks &= diffColourBoard;
-        potentialMoves |= potentialAttacks;
-        if ((potentialMoves & endingPosition) == 0L) {
-            System.out.println("Pawn move invalid. Ending position is not part of the valid pawn moves at starting position");
+        long moves = generateLegalMoves(chessboard, isWhitePiece, startingPosition, pieceCode);
+        if ((moves & endingPosition) == 0L) {
+            System.out.println("Move invalid. Ending position is not part of the valid moves at starting position");
             return false;
         }
         return true;

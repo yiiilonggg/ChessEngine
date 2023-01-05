@@ -72,6 +72,12 @@ public class PCMBB {
     };
     public static long[][] ROOK_ATTACK_BOARD;
     public static long[][] BISHOP_ATTACK_BOARD;
+
+    public static final char[] whitePieceCodes = new char[] { 'K', 'Q', 'R', 'B', 'N', 'P' };
+    public static final char[] blackPieceCodes = new char[] { 'k', 'q', 'r', 'b', 'n', 'p' };
+    private static long rankMask = 0b11111111L;
+    private static long fileMask = 0b100000001000000010000000100000001000000010000000100000001L;
+
     /**
      * 
      * initialises static variables of the class
@@ -258,38 +264,6 @@ public class PCMBB {
         }
         return attackBoard;
     }
-    /**
-     * 
-     * @param square        int index of piece coordinate
-     * @param occupancy     long of the board
-     * @return              long of all bishop attacks for bishop at square and occupancy
-     * 
-     */
-    public static long getBishopAttacks(int square, long occupancy) {
-        return BISHOP_ATTACK_BOARD[square][(int) (((occupancy & BISHOP_MASK[square]) * BISHOP_MAGIC[square]) >>> 55)];
-    }
-
-    /**
-     * 
-     * @param square        int index of piece coordinate
-     * @param occupancy     long of the board
-     * @return              long of all rook attacks for rook at square and occupancy
-     * 
-     */
-    public static long getRookAttacks(int square, long occupancy) {
-        return ROOK_ATTACK_BOARD[square][(int) (((occupancy & ROOK_MASK[square]) * ROOK_MAGIC[square]) >>> 52)];
-    }
-
-    /**
-     * 
-     * @param square        int index of piece coordinate
-     * @param occupancy     long of the board
-     * @return              long of all queen attacks for queen at square and occupancy
-     * 
-     */
-    public static long getQueenAttacks(int square, long occupancy) {
-        return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy);
-    }
 
     /**
      * 
@@ -390,6 +364,86 @@ public class PCMBB {
     
     /**
      * 
+     * @param square        int index of piece coordinate
+     * @param occupancy     long of the board
+     * @return              long of all bishop attacks for bishop at square and occupancy
+     * 
+     */
+    public static long getBishopAttacks(int square, long occupancy) {
+        return BISHOP_ATTACK_BOARD[square][(int) (((occupancy & BISHOP_MASK[square]) * BISHOP_MAGIC[square]) >>> 55)];
+    }
+
+    /**
+     * 
+     * @param square        int index of piece coordinate
+     * @param occupancy     long of the board
+     * @return              long of all rook attacks for rook at square and occupancy
+     * 
+     */
+    public static long getRookAttacks(int square, long occupancy) {
+        return ROOK_ATTACK_BOARD[square][(int) (((occupancy & ROOK_MASK[square]) * ROOK_MAGIC[square]) >>> 52)];
+    }
+
+    /**
+     * 
+     * @param square        int index of piece coordinate
+     * @param occupancy     long of the board
+     * @return              long of all queen attacks for queen at square and occupancy
+     * 
+     */
+    public static long getQueenAttacks(int square, long occupancy) {
+        return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy);
+    }
+    
+    public static long getKingMoves(long startingPosition) {
+        return KING_MOVE_MAP.get(startingPosition);
+    }
+
+    public static long getPawnMoves(long startingPosition, boolean isWhitePiece) {
+        return (isWhitePiece) ? PCMBB.WHITE_PAWN_MOVE_MAP.get(startingPosition) : PCMBB.BLACK_PAWN_MOVE_MAP.get(startingPosition);
+    }
+
+    public static long getPawnAttacks(long startingPosition, boolean isWhitePiece) {
+        return (isWhitePiece) ? PCMBB.WHITE_PAWN_ATTACK_MAP.get(startingPosition) : PCMBB.BLACK_PAWN_ATTACK_MAP.get(startingPosition);
+    }
+
+    public static long getKnightMoves(long startingPosition) {
+        return PCMBB.KNIGHT_MOVE_MAP.get(startingPosition);
+    }
+
+    public static long getRankMask(int rank) {
+        return rankMask << rank;
+    }
+
+    public static long getFileMask(int file) {
+        return fileMask << file;
+    }
+
+    public static long getTopRightDiagonal(int rank, int file) {
+        long mask = 0L;
+        for (int r = rank + 1, f = file + 1; r < 8 && f < 8; r++, f++) {
+            mask |= INDEX_TO_BIN_MAP.get(r * 8 + f);
+        }
+        for (int r = rank - 1, f = file - 1; r >= 0 && f >= 0; r--, f--) {
+            mask |= INDEX_TO_BIN_MAP.get(r * 8 + f);
+        }
+        return mask;
+    }
+
+    public static long getTopLeftDiagonal(int rank, int file) {
+        long mask = 0L;
+        
+        for (int r = rank + 1, f = file - 1; r < 8 && f >= 0; r++, f--) {
+            mask |= INDEX_TO_BIN_MAP.get(r * 8 + f);
+        }
+        for (int r = rank - 1, f = file + 1; r >= 0 && f < 8; r--, f++) {
+            mask |= INDEX_TO_BIN_MAP.get(r * 8 + f);
+        }
+        return mask;
+    }
+
+    /**
+     * 
      * @param position  String of the position of the piece in the format [file][rank]
      * @return          long of the input position
      */
@@ -451,5 +505,13 @@ public class PCMBB {
         str.append(" |     |  A  |  B  |  C  |  D  |  E  |  F  |  G  |  H  | \n");
         str.append("---------------------------------------------------------\n");
         System.out.println(str.toString());
+    }
+
+    public static List<Long> getIndividualPositions(long position) {
+        List<Long> individualPositions = new ArrayList<>();
+        for (int i = 0; i < 64; i++) {
+            if ((position & (1L << i)) != 0L) individualPositions.add(1L << i);
+        }
+        return individualPositions;
     }
 }

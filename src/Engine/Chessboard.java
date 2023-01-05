@@ -39,10 +39,15 @@ public class Chessboard {
      * 
      */
     private boolean isWhiteTurn;
+    private boolean kingInCheck;
+    private boolean kingInDoubleCheck;
+    private long criticalAttacksOnKing;
+    private long criticalAttackers;
     private boolean whiteKingSideCastle = false, whiteQueenSideCastle = false, blackKingSideCastle = false, blackQueenSideCastle = false;
     private long enPassantFlag;
     private int halfMoveClock, fullMoveClock;
     private boolean gameState;
+    public Stack<Move> moveHistory;
 
     // default FEN String
     public static final String DEFAULT_FEN_STRING = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -141,6 +146,8 @@ public class Chessboard {
         // set game state
         // implement a check to check the input position if the position is already a checkmate position
         this.gameState = true;
+        updateCheckInformation();
+        this.moveHistory = new Stack<>();
 
         // print board to console
         System.out.println(printBoard());
@@ -171,6 +178,26 @@ public class Chessboard {
      */
     public long getFullBitboard() {
         return getWhiteBitboard() | getBlackBitboard();
+    }
+    
+    /**
+     * 
+     * @param   isWhitePiece    boolean of piece color where true is white
+     * @return                  long of same colored board
+     * 
+     */
+    public long getSameColouredBoard(boolean isWhitePiece) {
+        return (isWhitePiece) ? getWhiteBitboard() : getBlackBitboard();
+    }
+
+    /**
+     * 
+     * @param   isWhitePiece    boolean of piece color where true is white
+     * @return                  long of different colored board
+     * 
+     */
+    public long getDiffColouredBoard(boolean isWhitePiece) {
+        return (!isWhitePiece) ? getWhiteBitboard() : getBlackBitboard();
     }
 
     /**
@@ -222,7 +249,9 @@ public class Chessboard {
         if (this.blackKingSideCastle) str.append("Black king side  |  ");
         if (this.blackQueenSideCastle) str.append("Black queen side  |  ");
         str.append("\n");
-        str.append("Half-move clock: ".concat(Integer.toString(this.halfMoveClock)).concat("; Full-move clock: ").concat(Integer.toString(this.fullMoveClock)));
+        str.append("Half-move clock: ".concat(Integer.toString(this.halfMoveClock)).concat("; Full-move clock: ").concat(Integer.toString(this.fullMoveClock)).concat("\n"));
+        if (this.isWhiteTurn && this.kingInCheck) str.append("Black king in check.\n");
+        if (!this.isWhiteTurn && this.kingInCheck) str.append("White king in check.\n");
         return str.toString();
     }
 
@@ -256,6 +285,22 @@ public class Chessboard {
         return this.isWhiteTurn;
     }
 
+    public long getPiecesPosition(char pieceCode) {
+        return this.bitboards.get(pieceCode);
+    }
+
+    public long getCriticalAttackMap() {
+        return this.criticalAttackers | this.criticalAttacksOnKing;
+    }
+
+    public boolean isKingInCheck() {
+        return this.kingInCheck;
+    }
+
+    public boolean isKingInDoubleCheck() {
+        return this.kingInDoubleCheck;
+    }
+
     /**
      * 
      * @param pieceCode         piece user has entered to move. case sensitivity handled at input
@@ -278,14 +323,58 @@ public class Chessboard {
      * 
      */
     public void performMove(char pieceCode, long moveLong) {
+        Move move = new Move(pieceCode, moveLong, false);
+
+        // perform move on piece
         bitboards.put(pieceCode, bitboards.get(pieceCode) ^ moveLong);
+
+        // check for pawn promotion
+        // check for king castling
+
+        // check for captures
         for (Map.Entry<Character, Long> pair : this.bitboards.entrySet()) {
             if (pieceCode == pair.getKey()) continue;
+            if ((pair.getValue() & moveLong) == 0L) continue;
+            move.setCapture(pair.getKey(), pair.getValue() & moveLong);
             this.bitboards.put(pair.getKey(), pair.getValue() & (~moveLong));
-            // check for pawn promotion
-            // check for king castling
         }
-        // need to update game states
+
+        // update game states
+        this.moveHistory.push(move);
         this.isWhiteTurn = !this.isWhiteTurn;
+        updateCheckInformation();
+    }
+
+    public void performNullMove() {
+        Move move = new Move(' ', 0L, true);
+        this.moveHistory.push(move);
+        this.isWhiteTurn = !this.isWhiteTurn;
+        updateCheckInformation();
+    }
+
+    public void undoMove() {
+        Move previousMove = this.moveHistory.pop();
+
+        // undo the move itself
+        if (!previousMove.getIsNullMove()) {
+            bitboards.put(previousMove.getMovingPiece(), bitboards.get(previousMove.getMovingPiece()) ^ previousMove.getMove());
+        }
+
+        // undo capture
+        if (previousMove.getIsCapture()) {
+            bitboards.put(previousMove.getCapturedPiece(), bitboards.get(previousMove.getCapturedPiece()) | previousMove.getCapturedPiecePosition());
+        }
+
+        // update game states
+        this.isWhiteTurn = !this.isWhiteTurn;
+        updateCheckInformation();
+    }
+
+    private void updateCheckInformation() {
+        long[] attackInformation = MoveHandler.generateAllAttackingSquares(this, true);
+        this.kingInCheck = attackInformation[1] != 0L;
+        this.kingInDoubleCheck = attackInformation[3] > 1L;
+        this.criticalAttacksOnKing = attackInformation[1];
+        this.criticalAttackers = attackInformation[2];
     }
 }

@@ -19,6 +19,7 @@ public class App {
                 System.out.println(chessboard.printBoard());
             }
         }
+        sc.close();
     }
 
     public static void main(String[] args) throws Exception {

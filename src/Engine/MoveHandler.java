@@ -9,9 +9,7 @@ public class MoveHandler {
     public static final String USER_STRING_PATTERN = "[kqrnbp] [a-h][1-8] [a-h][1-8]";
 
     /**
-     * 
      *  move compasses of the various pieces
-     * 
      */
     public static final int[] horizontalCompass = new int[] { -1, 1 };
     public static final int[] verticalCompass = new int[] { -8, 8 };
@@ -20,11 +18,9 @@ public class MoveHandler {
     public static final int[] queenCompass = new int[] { -1, 1, -8, 8, -7, 7, -9, 9 };
 
     /**
-     * 
      * @param chessboard    Chessboard object of current chessboard
      * @param userString    String that user has entered that represents the intended move
      * @return              boolean of whether the move is successful or not. successful moves are updated onto the passed chessboard object
-     * 
      */
     public static boolean performUserMove(Chessboard chessboard, String userString) {
         // 1. check if user stirng is in correct format
@@ -47,11 +43,8 @@ public class MoveHandler {
         long endingPositionLong = PCMBB.positionCoordinatesToBitboard(endingPosition);
         if (!verifyMove(chessboard, pieceCode, startingPositonLong, endingPositionLong)) return false;
 
-        // 4. generate move
-        long moveLong = startingPositonLong | endingPositionLong;
-
-        // 5. perform move
-        chessboard.performMove(pieceCode, moveLong);
+        // 4. perform move
+        chessboard.performMove(pieceCode, startingPositonLong, endingPositionLong);
         return true;
     }
 
@@ -64,14 +57,32 @@ public class MoveHandler {
         return moves;
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if king is white
+     * @param startingPosition  long of king position
+     * @return                  long of king's moves (based on position only)
+     */
     public static long generateKingAttacks(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
         return PCMBB.getKingMoves(startingPosition);
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if knight is white
+     * @param startingPosition  long of knight position
+     * @return                  long of knight's moves
+     */
     public static long generateKnightMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
         return PCMBB.KNIGHT_MOVE_MAP.get(startingPosition);
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if pawn is white
+     * @param startingPosition  long of pawn position
+     * @return                  long of pawn's moves (all attacks and moves, en-passant considered)
+     */
     public static long generatePawnMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
         // if the there is a same-coloured piece one square ahead, then the pawn cannot move forward at all
         long sameColourBoard = chessboard.getSameColouredBoard(isWhitePiece);
@@ -81,18 +92,46 @@ public class MoveHandler {
         // check if there are pieces to capture in diagonally-opposite positions
         long potentialAttacks = generatePawnAttacks(chessboard, isWhitePiece, startingPosition);
         potentialMoves |= potentialAttacks;
-
-        // check for en passant
-
         return potentialMoves;
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if pawn is white
+     * @param startingPosition  long of pawn position
+     * @return                  long of pawn's attacks (all attacks, en-passant considered)
+     */
     public static long generatePawnAttacks(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
         long potentialAttacks = PCMBB.getPawnAttacks(startingPosition, isWhitePiece);
         long diffColourBoard = chessboard.getDiffColouredBoard(isWhitePiece);
+
+        // check for en passant
+        long potentialEnPassant = chessboard.getEnPassantFlag();
+        if (PCMBB.RANK_COORDINATES_MAP.get(startingPosition) == PCMBB.RANK_COORDINATES_MAP.get(potentialEnPassant)) {
+            if ((startingPosition << 1) == potentialEnPassant) {
+                if (isWhitePiece) {
+                    potentialAttacks |= (startingPosition << 9);
+                } else {
+                    potentialAttacks |= (startingPosition >>> 7);
+                }
+            } else if ((startingPosition >>> 1) == potentialEnPassant) {
+                if (isWhitePiece) {
+                    potentialAttacks |= (startingPosition << 7);
+                } else {
+                    potentialAttacks |= (startingPosition >>> 9);
+                }
+            }
+        }
         return potentialAttacks & diffColourBoard;
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if piece is white
+     * @param startingPosition  long of piece position
+     * @param pieceCode         char of which sliding piece to generate (b - bishop, r - rook, q - queen)
+     * @return                  long of all possible sliding moves
+     */
     public static long generateSlidingMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition, char pieceCode) {
         long fullBoard = chessboard.getFullBitboard();
         switch (pieceCode) {
@@ -105,6 +144,13 @@ public class MoveHandler {
         }
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if piece is white
+     * @param startingPosition  long of piece position
+     * @param pieceCode         char of piece code queried
+     * @return                  long of all attacks only
+     */
     public static long generatePieceAttackingSquares(Chessboard chessboard, boolean isWhitePiece, long startingPosition, char pieceCode) {
         long potentialAttacks;
         switch (Character.toLowerCase(pieceCode)) {
@@ -124,6 +170,16 @@ public class MoveHandler {
         return potentialAttacks;
     }
 
+    /**
+     * for the return order,
+     * index 0: all attacks from all pieces queried, regardless of target and position
+     * index 1: all attacks that hit the king
+     * index 2: all positions of pieces' whose attack hits the king
+     * index 3: count of number of pieces that attack the king
+     * @param chessboard    Chessboard of chessboard in game
+     * @param isOpposition  boolean of if we are generating the opposition's attacking moves against us
+     * @return              long[] of attack information
+     */
     public static long[] generateAllAttackingSquares(Chessboard chessboard, boolean isOpposition) {
         // check which color to generate attacking squares of
         // e.g. if it is white's turn and we are to generate the opposition attacking squares, then we generate for black pieces
@@ -179,9 +235,16 @@ public class MoveHandler {
         return new long[] { allAttacks, criticalAttacks, criticalAttackers, (long) count };
     }
 
+    /**
+     * @param chessboard        Chessboard of chessboard in game
+     * @param isWhitePiece      boolean of if piece is white
+     * @param startingPosition  long of piece's posiiton
+     * @param pieceCode         char of piece code
+     * @return                  long of all legal moves (considers checks, double checks, pins, etc)
+     */
     public static long generateLegalMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition, char pieceCode) {
         // check for double check
-        // if king under double check, the king has to move
+        // if king under double check, the king has to move, no other piece can move
         if (chessboard.isKingInDoubleCheck() && Character.toLowerCase(pieceCode) != 'k') return 0L;
 
         long potentialMoves;
@@ -208,16 +271,15 @@ public class MoveHandler {
 
         // check for pinned piece
         // remove the piece and perform a null move check if the king is still in check
-        chessboard.performMove(pieceCode, startingPosition);
+        chessboard.performMove(pieceCode, startingPosition, 0L);
         chessboard.performNullMove();
         boolean pinnedPiece = chessboard.isKingInCheck();
-
-        // if not pinned piece, then it can move anywhere else, so -1 which has a binary string of 111...111
-        long blockingPositions = (pinnedPiece) ? chessboard.getCriticalAttackMap() : -1;
-
         // undo two moves as we need to also undo the nullMove
         chessboard.undoMove();
         chessboard.undoMove();
+
+        // if not pinned piece, then it can move anywhere else, so -1 which has a binary string of 111...111
+        long blockingPositions = (pinnedPiece) ? chessboard.getCriticalAttackMap() : -1;
         potentialMoves &= blockingPositions;
 
         return potentialMoves;
@@ -262,8 +324,7 @@ public class MoveHandler {
         if (kingInCheck) {
             // check that if the move is performed, it will block the check
             // i.e. if i generate all the attacking squares again after the move is made, the king is not under attack
-            long pseudoMove = startingPosition | endingPosition;
-            chessboard.performMove(pieceCode, pseudoMove);
+            chessboard.performMove(pieceCode, startingPosition, endingPosition);
             chessboard.performNullMove();
             boolean kingStillInCheck = chessboard.isKingInCheck();
             chessboard.undoMove();

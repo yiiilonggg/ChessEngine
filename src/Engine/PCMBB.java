@@ -4,7 +4,6 @@ import java.util.*;
 public class PCMBB {
 
     /**
-     * 
      * PCMBB = Pre-Computed (Magic) BitBoards
      * helper maps
      * all helper maps are view only (of unmodifiableMap class)
@@ -12,7 +11,6 @@ public class PCMBB {
      * the idea is to get a list of maps with all move and attack information pre-computed
      * initialised once at start-up of app
      * when required to obtain the movelist of a piece in a position, instead of computing, we just poll the piece's position and the move list is retrieved
-     * 
      */
     public static Map<Long, Integer> RANK_COORDINATES_MAP;
     public static Map<Long, Character> FILE_COORDINATES_MAP;
@@ -29,14 +27,12 @@ public class PCMBB {
     public static final int[][] KNIGHT_MOVES = new int[][] { { -1, 2 }, { -2, 1 }, { -2, -1 }, { -1, -2 }, { 1, 2 }, { 2, 1 }, { 2, -1 }, { 1, -2 } };
 
     /**
-     * 
      * information for magic bitboards
      * for rooks (horizontal and vertical sliding moves) and bishops (diagonal)
      * queen moves are derived by generating both rook and bishop moves, and taking the bitwiseOR of the results
      * the idea is that there is a series of transformations that you can modify to an occupancy mask, which then returns you all possible moves for the given position
      * transformation: ((occupancy & mask) * magicNumber) >>> bitshift
      * when we want to retrieve all moves, we only need two information: square the piece is on, and the occupancy of other pieces around it
-     * 
      */
     public static final int[] BIT_TABLE = new int[] {
         63, 0, 58, 1, 59, 47, 53, 2,
@@ -79,12 +75,9 @@ public class PCMBB {
     private static long fileMask = 0b100000001000000010000000100000001000000010000000100000001L;
 
     /**
-     * 
      * initialises static variables of the class
-     * 
      */
     static {
-
         // maps of useful information for quick retrieval
         Map<Long, Integer> rankCoordinates = new HashMap<>();
         Map<Long, Character> fileCoordinates = new HashMap<>();
@@ -132,10 +125,8 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param pieceCode char that is either 'k' or 'n'
      * @return          Map<Long, Long> of all possible positions and corresponding moves
-     * 
      */
     private static Map<Long, Long> fillStaticPieceMoves(char pieceCode) {
         int[][] moveset = (pieceCode) == 'k' ? KING_MOVES : KNIGHT_MOVES;
@@ -155,10 +146,8 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param isWhitePawn   boolean flag for whether the pawn moves are for white or black
      * @return              2 Map<Long, Long>, where index 0 is for moves, index 1 is for attacks
-     * 
      */
     private static List<Map<Long, Long>> fillPawnPieceMoves(boolean isWhitePawn) {
         Map<Long, Long> pawnMoves = new HashMap<>(), pawnAttacks = new HashMap<>();
@@ -181,12 +170,10 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param position      long that represents the position of the pawn on the chessboard
      * @param file          int that represents the file the pawn is on
      * @param isWhitePawn   boolean flag for whether it is a white or black pawn
      * @return              long of pawn attacks
-     * 
      */
     private static long getPawnAttacks(long position, int file, boolean isWhitePawn) {
         if (file == 0) return (isWhitePawn) ? (position << 9) : (position >>> 9);
@@ -195,9 +182,7 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @return  long[64] of rook masks for every position on the board
-     * 
      */
     private static long[] findRookMask() {
         long[] masks = new long[64];
@@ -214,9 +199,7 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @return  long[64] of bishop masks for every position on the board
-     * 
      */
     private static long[] findBishopMask() {
         long[] masks = new long[64];
@@ -233,10 +216,8 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param isBishop  boolean of whether we are generating the bishop attack board
      * @return          long[64][] attack board
-     * 
      */
     private static long[][] fillAttackBoards(boolean isBishop) {
         long[][] attackBoard = (isBishop) ? new long[64][512] : new long[64][4096];
@@ -266,12 +247,10 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param squares       int[] of important bits at each square
      * @param squareNumber  int of total number of important squares
      * @param mask          long some permutation of the board occupancy
      * @return              long of the important bits based on the occupancy and important squares
-     * 
      */
     private static long setOccupancy(int[] squares, int squareNumber, long mask) {
         long ret = 0L;
@@ -282,11 +261,9 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param idx       int square of rook position
      * @param block     long of board occupancies
      * @return          long of all posible moves. obtains this by brute force
-     * 
      */
     private static long findRookMove(int idx, long block) {
         long move = 0L;
@@ -318,11 +295,9 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param idx       int square of bishop position
      * @param block     long of board occupancies
      * @return          long of all posible moves. obtains this by brute force
-     * 
      */
     private static long findBishopMove(int idx, long block) {
         long ret = 0L;
@@ -363,62 +338,83 @@ public class PCMBB {
     }
     
     /**
-     * 
      * @param square        int index of piece coordinate
      * @param occupancy     long of the board
      * @return              long of all bishop attacks for bishop at square and occupancy
-     * 
      */
     public static long getBishopAttacks(int square, long occupancy) {
         return BISHOP_ATTACK_BOARD[square][(int) (((occupancy & BISHOP_MASK[square]) * BISHOP_MAGIC[square]) >>> 55)];
     }
 
     /**
-     * 
      * @param square        int index of piece coordinate
      * @param occupancy     long of the board
      * @return              long of all rook attacks for rook at square and occupancy
-     * 
      */
     public static long getRookAttacks(int square, long occupancy) {
         return ROOK_ATTACK_BOARD[square][(int) (((occupancy & ROOK_MASK[square]) * ROOK_MAGIC[square]) >>> 52)];
     }
 
     /**
-     * 
      * @param square        int index of piece coordinate
      * @param occupancy     long of the board
      * @return              long of all queen attacks for queen at square and occupancy
-     * 
      */
-    public static long getQueenAttacks(int square, long occupancy) {
-        return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy);
-    }
+    public static long getQueenAttacks(int square, long occupancy) { return getBishopAttacks(square, occupancy) | getRookAttacks(square, occupancy); }
     
-    public static long getKingMoves(long startingPosition) {
-        return KING_MOVE_MAP.get(startingPosition);
-    }
+    /**
+     * @param startingPosition  long of king's position
+     * @return                  long of all moves from king's position (excludes castling)
+     */
+    public static long getKingMoves(long startingPosition) { return KING_MOVE_MAP.get(startingPosition); }
 
+    /**
+     * @param startingPosition  long of pawn's position
+     * @param isWhitePiece      boolean of if pawn is white
+     * @return                  long of all pawn's forward movements
+     */
     public static long getPawnMoves(long startingPosition, boolean isWhitePiece) {
         return (isWhitePiece) ? PCMBB.WHITE_PAWN_MOVE_MAP.get(startingPosition) : PCMBB.BLACK_PAWN_MOVE_MAP.get(startingPosition);
     }
 
+    /**
+     * @param startingPosition  long of pawn's position
+     * @param isWhitePiece      boolean of if pawn is white
+     * @return                  long of all pawn's attacks (excluding en-passant)
+     */
     public static long getPawnAttacks(long startingPosition, boolean isWhitePiece) {
         return (isWhitePiece) ? PCMBB.WHITE_PAWN_ATTACK_MAP.get(startingPosition) : PCMBB.BLACK_PAWN_ATTACK_MAP.get(startingPosition);
     }
 
+    /**
+     * @param startingPosition  long of knight's position
+     * @return                  long of all of knight's move
+     */
     public static long getKnightMoves(long startingPosition) {
         return PCMBB.KNIGHT_MOVE_MAP.get(startingPosition);
     }
 
+    /**
+     * @param rank  int of target rank (0 to 7)
+     * @return      long of 1s that represent the rank
+     */
     public static long getRankMask(int rank) {
         return rankMask << rank;
     }
 
+    /**
+     * @param file  int of target file (0 to 7)
+     * @return      long of 1s that represent the file
+     */
     public static long getFileMask(int file) {
         return fileMask << file;
     }
 
+    /**
+     * @param file  int of target rank (0 to 7)
+     * @param file  int of target file (0 to 7)
+     * @return      long of 1s that represent the diagonal (top right to bottom left)
+     */
     public static long getTopRightDiagonal(int rank, int file) {
         long mask = 0L;
         for (int r = rank + 1, f = file + 1; r < 8 && f < 8; r++, f++) {
@@ -430,6 +426,11 @@ public class PCMBB {
         return mask;
     }
 
+    /**
+     * @param file  int of target rank (0 to 7)
+     * @param file  int of target file (0 to 7)
+     * @return      long of 1s that represent the diagonal (top left to bottom right)
+     */
     public static long getTopLeftDiagonal(int rank, int file) {
         long mask = 0L;
         
@@ -443,7 +444,6 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param position  String of the position of the piece in the format [file][rank]
      * @return          long of the input position
      */
@@ -454,7 +454,6 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param position  String of position of piece in the format [file][rank]
      * @return          int index of the piece's position
      */
@@ -464,10 +463,8 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param occupancies   List<String> of positions on the board with pieces
      * @return              long of all positions in list combined
-     * 
      */
     public static long createOccupancy(List<String> occupancies) {
         long bitboard = 0L;
@@ -478,9 +475,7 @@ public class PCMBB {
     }
 
     /**
-     * 
      * @param bitboard  long of a bitboard to be printed
-     * 
      */
     public static void printBoard(long bitboard) {
         // print board
@@ -507,6 +502,10 @@ public class PCMBB {
         System.out.println(str.toString());
     }
 
+    /**
+     * @param position  long of positions that can contain multiple pieces
+     * @return          List<Long> of all positions in the input position
+     */
     public static List<Long> getIndividualPositions(long position) {
         List<Long> individualPositions = new ArrayList<>();
         for (int i = 0; i < 64; i++) {

@@ -4,7 +4,6 @@ import java.util.*;
 public class Chessboard {
     
     /**
-     * 
      * Chessboard bitboard representation
      * bit 0  -> A1 (bottom left)
      * bit 7  -> H1 (bottom right)
@@ -13,20 +12,19 @@ public class Chessboard {
      * 
      * bitboard representing white pieces: K, Q, R, N, B, P
      * bitboard representing black pieces: k, q, r, n, b, p
-     * 
-     * bitboard representing all white pieces: W
-     * bitboard representing all black pieces: w
-     * 
-     * bitboard representing all pieces: A
-     * 
      */
     private Map<Character, Long> bitboards;
 
     /**
-     * 
      * attributes for chessboard position
      * 
      * isWhiteTurn: true for white to move, false for black to move
+     * 
+     * kingInCheck: true if king is in check, false otherwise
+     * kingInDoubleCheck: true if there are two or more attackers on the king, false otherwise
+     * 
+     * criticalAttacksOnKing: long of all attacks on king (squares that attack the king and are being attacked by the same piece)
+     * criticalAttackers: long of opposition pieces positions that are attacking the king
      * 
      * castling rights (whiteKingSideCastle, whiteQueenSideCastle, blackKingSideCastle, blackQueenSideCastle): true for (potential) castling availability, false otherwise
      * (note): not necessary that the king can castle in this move, only that the king or rook has yet to move
@@ -37,6 +35,7 @@ public class Chessboard {
      * 
      * game state: tracks if the game is still in progress, import so that the scanner still waits for user input
      * 
+     * moveHistory: stack of Move objects to present moves that were made
      */
     private boolean isWhiteTurn;
     private boolean kingInCheck;
@@ -52,7 +51,6 @@ public class Chessboard {
     // default FEN String
     public static final String DEFAULT_FEN_STRING = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     /**
-     * 
      * constructor of the chessboard class. default chess position is the starting position
      * fenstring format: (pieces position) (whose turn) (castling rights) (enpassant flag) (halfmove clock) (fullmove clock)
      * pieces position: character corresponds to a piece, number represents the number of empty cells, / represents next row. from rank 8 to 1, from A file to H, on chessboard
@@ -62,7 +60,6 @@ public class Chessboard {
      * 
      * @param   fenstring   FEN string of starting position. if empty string passed, default starting position is used
      * @return              returns a Chessboard object with the initialised chess position
-     * 
      */
     public Chessboard(String fenString) {
 
@@ -154,51 +151,35 @@ public class Chessboard {
     }
 
     /**
-     * 
      * @return      bitboard of all white pieces
-     * 
      */
     public long getWhiteBitboard() {
         return bitboards.get('K') | bitboards.get('Q') | bitboards.get('R') | bitboards.get('N') | bitboards.get('B') | bitboards.get('P');
     }
 
     /**
-     * 
      * @return      bitboard of all black pieces
-     * 
      */
     public long getBlackBitboard() {
         return bitboards.get('k') | bitboards.get('q') | bitboards.get('r') | bitboards.get('n') | bitboards.get('b') | bitboards.get('p');
     }
 
     /**
-     * 
      * @return      bitboard of all pieces
-     * 
      */
-    public long getFullBitboard() {
-        return getWhiteBitboard() | getBlackBitboard();
-    }
+    public long getFullBitboard() { return getWhiteBitboard() | getBlackBitboard(); }
     
     /**
-     * 
      * @param   isWhitePiece    boolean of piece color where true is white
      * @return                  long of same colored board
-     * 
      */
-    public long getSameColouredBoard(boolean isWhitePiece) {
-        return (isWhitePiece) ? getWhiteBitboard() : getBlackBitboard();
-    }
+    public long getSameColouredBoard(boolean isWhitePiece) { return (isWhitePiece) ? getWhiteBitboard() : getBlackBitboard(); }
 
     /**
-     * 
      * @param   isWhitePiece    boolean of piece color where true is white
      * @return                  long of different colored board
-     * 
      */
-    public long getDiffColouredBoard(boolean isWhitePiece) {
-        return (!isWhitePiece) ? getWhiteBitboard() : getBlackBitboard();
-    }
+    public long getDiffColouredBoard(boolean isWhitePiece) { return (!isWhitePiece) ? getWhiteBitboard() : getBlackBitboard(); }
 
     /**
      * prints the board state onto the console.
@@ -256,57 +237,63 @@ public class Chessboard {
     }
 
     /**
-     * 
      * @param   position    takes in a long that represents a position       
      * @return              returns a String of the board position of the given long
-     * 
      */
     private String findPositionName(long position) {
         int rank = PCMBB.RANK_COORDINATES_MAP.get(position);
         char file = PCMBB.FILE_COORDINATES_MAP.get(position);
-        return Integer.toString(rank).concat(Character.toString(file));
+        return Character.toString(file).concat(Integer.toString(rank));
     }
 
     /**
-     * 
-     * @return  getter to return the game state
-     * 
+     * @return  boolean of the game state
      */
-    public boolean getGameState() {
-        return this.gameState;
-    }
+    public boolean getGameState() { return this.gameState; }
 
     /**
-     * 
-     * @return  getter to return the turn of the game
-     * 
+     * @return  boolean of turn of the game
      */
-    public boolean getIsWhiteTurn() {
-        return this.isWhiteTurn;
-    }
+    public boolean getIsWhiteTurn() { return this.isWhiteTurn; }
 
+    /**
+     * @return  long of en passant flag
+     */
+    public long getEnPassantFlag() { return this.enPassantFlag; }
+
+    /**
+     * @param pieceCode char of queried piece
+     * @return  long of all positions of a input piece code
+     */
     public long getPiecesPosition(char pieceCode) {
         return this.bitboards.get(pieceCode);
     }
 
+    /**
+     * @return  long of critical attacks and critical attackers
+     */
     public long getCriticalAttackMap() {
         return this.criticalAttackers | this.criticalAttacksOnKing;
     }
 
+    /**
+     * @return  boolean of king in check
+     */
     public boolean isKingInCheck() {
         return this.kingInCheck;
     }
 
+    /**
+     * @return  boolean of king in double check
+     */
     public boolean isKingInDoubleCheck() {
         return this.kingInDoubleCheck;
     }
 
     /**
-     * 
      * @param pieceCode         piece user has entered to move. case sensitivity handled at input
      * @param polledPosition    long of the position entered
      * @return                  true if piece entered is at position, false otherwise
-     * 
      */
     public boolean checkPieceLocation(char pieceCode, long polledPosition) {
         if ((bitboards.get(pieceCode) & polledPosition) == 0) {
@@ -317,16 +304,36 @@ public class Chessboard {
     }
 
     /**
-     * 
-     * @param pieceCode     piece to move
-     * @param moveLong      move identity (starting and ending position included)
-     * 
+     * @param pieceCode             piece to move
+     * @param startingPosition      long of starting position
+     * @param endingPosition        long of ending position
      */
-    public void performMove(char pieceCode, long moveLong) {
+    public void performMove(char pieceCode, long startingPosition, long endingPosition) {
+        long moveLong = startingPosition | endingPosition;
         Move move = new Move(pieceCode, moveLong, false);
 
         // perform move on piece
         bitboards.put(pieceCode, bitboards.get(pieceCode) ^ moveLong);
+
+        if (Character.toLowerCase(pieceCode) == 'p') {
+            // check if pawn has moved to be an en passant target
+            if (((startingPosition << 16) == endingPosition) || (startingPosition >>> 16) == endingPosition) {
+                this.enPassantFlag = endingPosition;
+            } else {
+                this.enPassantFlag = 0L;
+            } 
+            // check if move is en passant
+            if (PCMBB.FILE_COORDINATES_MAP.get(startingPosition) != PCMBB.FILE_COORDINATES_MAP.get(endingPosition) && (this.getDiffColouredBoard(isWhiteTurn) & endingPosition) == 0L) {
+                if (isWhiteTurn) {
+                    bitboards.put('p', bitboards.get('p') ^ (endingPosition >>> 8));
+                    move.setCapture('p', endingPosition >>> 8);
+                } else {
+                    bitboards.put('P', bitboards.get('P') ^ (endingPosition << 8));
+                    move.setCapture('P', endingPosition << 8);
+                }
+            }
+        }
+        move.setEnPassantFlag(this.enPassantFlag);
 
         // check for pawn promotion
         // check for king castling
@@ -345,6 +352,10 @@ public class Chessboard {
         updateCheckInformation();
     }
 
+    /**
+     *  performs a move that does nothing to the chessboard
+     *  usually used to check if a move is illegal due to pinned pieces
+     */
     public void performNullMove() {
         Move move = new Move(' ', 0L, true);
         this.moveHistory.push(move);
@@ -352,8 +363,12 @@ public class Chessboard {
         updateCheckInformation();
     }
 
+    /**
+     *  undo-s the latest move on the move stack
+     */
     public void undoMove() {
         Move previousMove = this.moveHistory.pop();
+        this.enPassantFlag = previousMove.getEnPassantFlag();
 
         // undo the move itself
         if (!previousMove.getIsNullMove()) {
@@ -365,11 +380,17 @@ public class Chessboard {
             bitboards.put(previousMove.getCapturedPiece(), bitboards.get(previousMove.getCapturedPiece()) | previousMove.getCapturedPiecePosition());
         }
 
+        // undo promotion
+        // undo castling
+
         // update game states
         this.isWhiteTurn = !this.isWhiteTurn;
         updateCheckInformation();
     }
 
+    /**
+     *  updates king information by recomputing attacking squares
+     */
     private void updateCheckInformation() {
         long[] attackInformation = MoveHandler.generateAllAttackingSquares(this, true);
         this.kingInCheck = attackInformation[1] != 0L;

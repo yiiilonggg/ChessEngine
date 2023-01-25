@@ -51,8 +51,14 @@ public class MoveHandler {
     public static long generateKingMoves(Chessboard chessboard, boolean isWhitePiece, long startingPosition) {
         long moves = generateKingAttacks(chessboard, isWhitePiece, startingPosition);
 
-        // add function in chessboard to generate if king/queen castling is possible
         // castling is possible, add castling moves
+        if (isWhitePiece) {
+            if (chessboard.checkWhiteKingSideCastle()) moves |= (startingPosition << 2);
+            if (chessboard.checkWhiteQueenSideCastle()) moves |= (startingPosition >>> 2);
+        } else {
+            if (chessboard.checkBlackKingSideCastle()) moves |= (startingPosition << 2);
+            if (chessboard.checkBlackQueenSideCastle()) moves |= (startingPosition >>> 2);
+        }
 
         return moves;
     }
@@ -270,17 +276,20 @@ public class MoveHandler {
         // check if king is underattack, moves can only be in the line of attack or a capture of the attacking piece
 
         // check for pinned piece
+        // kings cannot be a pinned piece
         // remove the piece and perform a null move check if the king is still in check
-        chessboard.performMove(pieceCode, startingPosition, 0L);
-        chessboard.performNullMove();
-        boolean pinnedPiece = chessboard.isKingInCheck();
-        // undo two moves as we need to also undo the nullMove
-        chessboard.undoMove();
-        chessboard.undoMove();
-
-        // if not pinned piece, then it can move anywhere else, so -1 which has a binary string of 111...111
-        long blockingPositions = (pinnedPiece) ? chessboard.getCriticalAttackMap() : -1;
-        potentialMoves &= blockingPositions;
+        if (Character.toLowerCase(pieceCode) != 'k') {
+            chessboard.performMove(pieceCode, startingPosition, 0L);
+            chessboard.performNullMove();
+            boolean pinnedPiece = chessboard.isKingInCheck();
+            // undo two moves as we need to also undo the nullMove
+            chessboard.undoMove();
+            chessboard.undoMove();
+            
+            // if not pinned piece, then it can move anywhere else, so -1 which has a binary string of 111...111
+            long blockingPositions = (pinnedPiece) ? chessboard.getCriticalAttackMap() : -1;
+            potentialMoves &= blockingPositions;
+        }
 
         return potentialMoves;
     }

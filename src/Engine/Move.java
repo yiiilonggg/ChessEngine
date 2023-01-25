@@ -3,6 +3,7 @@ package Engine;
 public class Move {
     private char pieceMoving;
     private char capturedPiece = ' ';
+    private char rookCode = 'R';
     private boolean isNullMove;
     private boolean isCapture = false;
     private boolean isPromotion = false;
@@ -10,6 +11,7 @@ public class Move {
     private long move;
     private long capturedPiecePosition = 0L;
     private long enPassantFlag = 0L;
+    private long rookMove = 0L;
 
     /**
      * constructor
@@ -32,6 +34,12 @@ public class Move {
         this.isCapture = true;
         this.capturedPiece = capturedPiece;
         this.capturedPiecePosition = capturedPiecePosition;
+    }
+
+    public void setCastle(char rookCode, long rookMove) {
+        this.isCastle = true;
+        this.rookCode = rookCode;
+        this.rookMove = rookMove;
     }
 
     /**
@@ -73,4 +81,10 @@ public class Move {
      * @return  boolean of if move was a dummy move
      */
     public boolean getIsNullMove() { return this.isNullMove; }
+
+    public boolean getIsCastle() { return this.isCastle; }
+
+    public char getRookCode() { return this.rookCode; }
+
+    public long getRookMove() { return this.rookMove; }
 }

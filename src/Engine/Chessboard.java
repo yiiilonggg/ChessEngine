@@ -46,6 +46,10 @@ public class Chessboard {
     private long enPassantFlag;
     private int halfMoveClock, fullMoveClock;
     private boolean gameState;
+    private final long whiteQueenSideCastleMask = Long.parseLong("00001110", 2);
+    private final long whiteKingSideCastleMask = Long.parseLong("01100000", 2);
+    private final long blackQueenSideCastleMask = Long.parseLong("00001110", 2) << 56;
+    private final long blackKingSideCastleMask = Long.parseLong("01100000", 2) << 56;
     public Stack<Move> moveHistory;
 
     // default FEN String
@@ -303,6 +307,22 @@ public class Chessboard {
         return true;
     }
 
+    public boolean checkWhiteKingSideCastle() {
+        return whiteKingSideCastle && (getWhiteBitboard() & whiteKingSideCastleMask) == 0L;
+    }
+
+    public boolean checkWhiteQueenSideCastle() {
+        return whiteQueenSideCastle && (getWhiteBitboard() & whiteQueenSideCastleMask) == 0L;
+    }
+
+    public boolean checkBlackKingSideCastle() {
+        return blackKingSideCastle && (getBlackBitboard() & blackKingSideCastleMask) == 0L;
+    }
+
+    public boolean checkBlackQueenSideCastle() {
+        return blackQueenSideCastle && (getBlackBitboard() & blackQueenSideCastleMask) == 0L;
+    }
+
     /**
      * @param pieceCode             piece to move
      * @param startingPosition      long of starting position
@@ -331,13 +351,27 @@ public class Chessboard {
                     bitboards.put('P', bitboards.get('P') ^ (endingPosition << 8));
                     move.setCapture('P', endingPosition << 8);
                 }
+            } 
+        } else {
+            this.enPassantFlag = 0L;
+        } 
+        if (Character.toLowerCase(pieceCode) == 'k') {
+            // check for king castling
+            char rookCode = (isWhiteTurn) ? 'R' : 'r';
+            long rookMove = 0L;
+            if (isWhiteTurn) {
+                if (((startingPosition >>> 2) == endingPosition)) rookMove = ((1L) | (1L << 3));
+                if ((startingPosition << 2) == endingPosition) rookMove = ((1L << 7) | (1L << 5));
+            } else {
+                if (((startingPosition >>> 2) == endingPosition)) rookMove = ((1L << 56) | (1L << 59));
+                if ((startingPosition << 2) == endingPosition) rookMove = ((1L << 63) | (1L << 61));
             }
+            bitboards.put(rookCode, bitboards.get(rookCode) ^ rookMove);
+            move.setCastle(rookCode, rookMove);
         }
-        move.setEnPassantFlag(this.enPassantFlag);
-
+        
         // check for pawn promotion
-        // check for king castling
-
+        
         // check for captures
         for (Map.Entry<Character, Long> pair : this.bitboards.entrySet()) {
             if (pieceCode == pair.getKey()) continue;
@@ -345,8 +379,9 @@ public class Chessboard {
             move.setCapture(pair.getKey(), pair.getValue() & moveLong);
             this.bitboards.put(pair.getKey(), pair.getValue() & (~moveLong));
         }
-
+        
         // update game states
+        move.setEnPassantFlag(this.enPassantFlag);
         this.moveHistory.push(move);
         this.isWhiteTurn = !this.isWhiteTurn;
         updateCheckInformation();
@@ -371,22 +406,22 @@ public class Chessboard {
         this.enPassantFlag = previousMove.getEnPassantFlag();
 
         // undo the move itself
-        if (!previousMove.getIsNullMove()) {
-            bitboards.put(previousMove.getMovingPiece(), bitboards.get(previousMove.getMovingPiece()) ^ previousMove.getMove());
-        }
+        if (!previousMove.getIsNullMove()) undoHelper(previousMove.getMovingPiece(), previousMove.getMove());
 
         // undo capture
-        if (previousMove.getIsCapture()) {
-            bitboards.put(previousMove.getCapturedPiece(), bitboards.get(previousMove.getCapturedPiece()) | previousMove.getCapturedPiecePosition());
-        }
+        if (previousMove.getIsCapture()) undoHelper(previousMove.getCapturedPiece(), previousMove.getCapturedPiecePosition());
 
         // undo promotion
+
         // undo castling
+        if (previousMove.getIsCastle()) undoHelper(previousMove.getRookCode(), previousMove.getRookMove());
 
         // update game states
         this.isWhiteTurn = !this.isWhiteTurn;
         updateCheckInformation();
     }
+
+    private void undoHelper(char pieceCode, long move) { bitboards.put(pieceCode, bitboards.get(pieceCode) | move); }
 
     /**
      *  updates king information by recomputing attacking squares
